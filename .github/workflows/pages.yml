@@ -1,0 +1,74 @@
+name: Build & deploy VPA Arena
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 4 3 * *"          # 3rd of each month, 12pm SGT: top up prices, rebuild charts
+  workflow_dispatch:
+    inputs:
+      update_prices:
+        description: "Download the latest prices first"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Unpack price data (first run after a browser upload)
+        run: |
+          shopt -s nullglob
+          parts=(prices_*.tgz data_upload/prices_*.tgz)
+          if [ ${#parts[@]} -gt 0 ]; then
+            mkdir -p collected_stocks
+            for f in "${parts[@]}"; do tar xzf "$f" -C collected_stocks; done
+            git config user.name "vpa-arena-bot"; git config user.email "vpa-arena-bot@users.noreply.github.com"
+            git rm -q "${parts[@]}"
+            git add collected_stocks
+            git commit -qm "Unpack price data"
+            git pull --rebase --autostash -X theirs && git push
+          fi
+      - name: Update prices (monthly / on request)
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.update_prices)
+        run: |
+          python update_data.py collected_stocks
+          git config user.name "vpa-arena-bot"
+          git config user.email "vpa-arena-bot@users.noreply.github.com"
+          git add collected_stocks
+          git diff --cached --quiet || git commit -m "Prices $(date -u +%Y-%m-%d)"
+          git pull --rebase --autostash -X theirs
+          git push
+      - name: Build chart packs + site
+        run: |
+          mkdir -p _site
+          python build_packs.py _site
+          cp vpa_arena.html _site/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
