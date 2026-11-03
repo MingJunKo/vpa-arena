@@ -187,6 +187,21 @@ kbd{background:var(--bg3);border:1px solid var(--border);border-radius:4px;paddi
 .sec h4{font-size:.75rem;text-transform:uppercase;letter-spacing:.7px;color:var(--text2);margin-bottom:12px}
 .hist-row{display:grid;grid-template-columns:80px 90px 70px 1fr 60px 55px;gap:8px;padding:7px 4px;border-bottom:1px solid var(--border);font-size:.73rem;font-family:var(--mono);align-items:center}
 .hist-row:last-child{border-bottom:none}
+.week-strip{background:var(--bg1);border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:18px}
+.wk-h{font-size:.72rem;color:var(--text2);margin-bottom:8px}.wk-h b{color:var(--text)}
+.wk-row{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.wk{background:var(--bg2);border:1px solid var(--border);border-radius:8px;text-align:center;padding:5px 0;min-height:44px}
+.wk small{display:block;font-size:.6rem;color:var(--text3)}.wk b{font-size:.85rem}
+.wk.part{border-color:rgba(240,185,11,.45);background:rgba(240,185,11,.07)}.wk.full{border-color:var(--gold);background:var(--gold-dim)}
+.pl-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.pl-stats div{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:9px;text-align:center}
+.pl-stats b{display:block;font-family:var(--mono);font-size:1rem}.pl-stats span{font-size:.6rem;color:var(--text2);text-transform:uppercase;letter-spacing:.4px}
+.hm-wrap{display:flex;gap:3px;overflow-x:auto;padding-bottom:4px}.hm-col{display:flex;flex-direction:column;gap:3px}
+.hm{width:13px;height:13px;border-radius:3px;background:var(--bg3);display:inline-block}
+.hm.lv1{background:rgba(240,185,11,.3)}.hm.lv2{background:rgba(240,185,11,.6)}.hm.lv3{background:var(--gold)}.hm.fut{opacity:.25}
+.hm-key{font-size:.62rem;color:var(--text3);margin-top:6px;display:flex;gap:4px;align-items:center}
+.sync-row{margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:.72rem;color:var(--text2);line-height:1.9}
+@media(max-width:900px){.pl-stats{grid-template-columns:repeat(2,1fr)}}
 .daychart{display:flex;align-items:flex-end;gap:4px;height:90px}
 .daychart .db{flex:1;background:var(--gold);border-radius:3px 3px 0 0;min-height:2px;opacity:.85;position:relative}
 .daychart .db small{position:absolute;bottom:-16px;left:50%;transform:translateX(-50%);font-size:.55rem;color:var(--text3)}
@@ -265,6 +280,7 @@ kbd{background:var(--bg3);border:1px solid var(--border);border-radius:4px;paddi
       <small>3× Pull the Trigger · 2× Plan the Trade · 1× Breakout Judge · 1× Position Trader · 1× Trade Manager. About 15 minutes; completes your daily goal</small>
     </button>
 
+    <div id="weekStrip" class="week-strip"></div>
     <div class="mode-grid">
       <button class="mode-card" onclick="startEndless('trade')" style="border-color:var(--gold)">
         <div class="mc-icon">💼</div><h3>Trade Manager</h3>
@@ -344,6 +360,7 @@ kbd{background:var(--bg3);border:1px solid var(--border);border-radius:4px;paddi
 <div class="screen" id="screen-stats">
   <div class="stats-inner">
     <h2 style="margin-bottom:16px">Your training record</h2>
+    <div class="sec"><h4>Practice log</h4><div id="practiceLog"></div></div>
     <div class="stats-grid">
       <div class="stat-card"><b id="stRounds">0</b><span>rounds</span></div>
       <div class="stat-card"><b id="stAcc">–</b><span>accuracy</span></div>
@@ -645,7 +662,7 @@ function dedupeBars(bars){
   }
   return out;
 }
-function today(){ const d=new Date(); return d.toISOString().slice(0,10); }
+function today(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }   // local date, so morning practice in SGT counts for today
 function daysBetween(a,b){ return Math.round((new Date(b)-new Date(a))/86400000); }
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',2200); }
 function esc(s){ return (s||'').replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
@@ -728,6 +745,7 @@ function renderTopbar(){
 function comboMult(){ return Math.min(2, 1 + Math.max(0,combo-1)*0.1); }
 function modeAcc(m){ const r=S.rounds.filter(x=>x.mode===m); const c=r.filter(x=>x.correct).length; return r.length? {n:r.length,acc:Math.round(100*c/r.length)}:null; }
 function renderHome(){
+  renderWeekStrip();
   const d = S.daily[today()] || {rounds:0,xp:0,correct:0};
   document.getElementById('goalCount').textContent = Math.min(d.rounds,DAILY_GOAL)+'/'+DAILY_GOAL;
   const frac = Math.min(1, d.rounds/DAILY_GOAL);
@@ -1946,6 +1964,107 @@ function plExec(dir, type, trig, stop, rule){
   return Object.assign({filled:true, fillI}, r);
 }
 
+/* ============================================================ PRACTICE LOG + CROSS-DEVICE SYNC
+   Every round records the device it was played on. The stats screen turns that into a calendar,
+   a weekly strip and a session list. Optional sync keeps phone + PC in one log via a PRIVATE
+   GitHub Gist (token with only the "gist" permission, stored in this browser only). */
+const DEVICE = (window.matchMedia && matchMedia('(pointer:coarse)').matches) || /iPhone|iPad|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
+const devIcon = d => d==='mobile' ? '📱' : d==='desktop' ? '💻' : '·';
+function localDay(ts){ const d=new Date(ts); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function practiceDays(){ const m={}; for(const r of S.rounds){ const k=localDay(r.ts); (m[k]=m[k]||{rounds:0,dev:new Set(),score:[]}).rounds++; m[k].dev.add(r.dev||'?'); if(typeof r.score==='number') m[k].score.push(r.score); } return m; }
+function sessions(){ // rounds less than 30 minutes apart = one session
+  const rs=[...S.rounds].sort((a,b)=>a.ts<b.ts?-1:1), out=[];
+  for(const r of rs){ const t=new Date(r.ts).getTime(), L=out[out.length-1];
+    if(L && t-L.end<30*60000 && (L.dev===(r.dev||'?'))){ L.end=t; L.n++; L.xp+=r.xp||0; if(r.correct) L.ok++; L.modes.add(r.mode); }
+    else out.push({start:t,end:t,n:1,xp:r.xp||0,ok:r.correct?1:0,dev:r.dev||'?',modes:new Set([r.mode])}); }
+  return out.reverse();
+}
+function renderWeekStrip(){
+  const el=document.getElementById('weekStrip'); if(!el) return; const pd=practiceDays(); let html='', n=0;
+  for(let i=6;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); const k=localDay(d), x=pd[k]; if(x) n++;
+    html+=`<div class="wk ${x?(x.rounds>=DAILY_GOAL?'full':'part'):''}" title="${k}: ${x?x.rounds+' rounds':'no practice'}"><small>${'SMTWTFS'[d.getDay()]}</small><b>${x?[...x.dev].map(devIcon).join(''):''}</b></div>`; }
+  el.innerHTML=`<div class="wk-h">This week · practised <b>${n}/7</b> days</div><div class="wk-row">${html}</div>`;
+}
+function renderPracticeLog(){
+  const el=document.getElementById('practiceLog'); if(!el) return;
+  const pd=practiceDays(), weeks=17, end=new Date(); end.setHours(0,0,0,0);
+  const start=new Date(end); start.setDate(start.getDate()-start.getDay()-7*(weeks-1));
+  let cells='';
+  for(let w=0;w<weeks;w++){ cells+='<div class="hm-col">';
+    for(let d=0;d<7;d++){ const day=new Date(start); day.setDate(start.getDate()+w*7+d); const k=localDay(day), x=pd[k], fut=day>end;
+      const lv = !x?0 : x.rounds>=DAILY_GOAL?3 : x.rounds>=4?2 : 1;
+      cells+=`<div class="hm lv${lv} ${fut?'fut':''}" title="${k}${x?`: ${x.rounds} rounds ${[...x.dev].map(devIcon).join('')}`:''}"></div>`; }
+    cells+='</div>'; }
+  const days=Object.keys(pd).sort(), last30=days.filter(k=>(end-new Date(k+'T00:00:00'))/86400000<30).length;
+  const byDev={mobile:0,desktop:0}; S.rounds.forEach(r=>{ if(byDev[r.dev]!==undefined) byDev[r.dev]++; });
+  const ss=sessions().slice(0,12);
+  el.innerHTML=
+   `<div class="pl-stats"><div><b>${days.length}</b><span>days practised</span></div><div><b>${last30}/30</b><span>last 30 days</span></div>
+      <div><b>${S.profile.streak} 🔥</b><span>goal streak (best ${S.profile.bestStreak})</span></div><div><b>📱 ${byDev.mobile} · 💻 ${byDev.desktop}</b><span>rounds by device</span></div></div>
+    <div class="hm-wrap">${cells}</div>
+    <div class="hm-key">less <i class="hm lv0"></i><i class="hm lv1"></i><i class="hm lv2"></i><i class="hm lv3"></i> more · darkest = daily goal (${DAILY_GOAL} rounds) met</div>
+    <h4 style="margin:16px 0 8px">Recent sessions</h4>
+    ${ss.length? ss.map(s=>{ const d=new Date(s.start), mins=Math.max(1,Math.round((s.end-s.start)/60000)+2);
+      return `<div class="hist-row" style="grid-template-columns:90px 60px 30px 1fr 70px 60px"><span>${d.toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short'})}</span><span style="color:var(--text3)">${d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span><span>${devIcon(s.dev)}</span><span style="color:var(--text2)">${s.n} round${s.n>1?'s':''} · ${[...s.modes].join(', ')}</span><span style="color:var(--text2)">~${mins} min</span><span style="color:var(--gold)">+${s.xp}</span></div>`; }).join('') : '<div class="q-hint">No sessions yet.</div>'}
+    <div class="sync-row">${syncStatusHTML()}</div>`;
+}
+
+/* ---- sync (optional) ---- */
+const SYNC_FILE='vpa_arena_sync.json', SYNC_DESC='VPA Arena sync (private)';
+const syncCfg=()=>{ try{ return JSON.parse(localStorage.getItem('vpaSync')||'null'); }catch(e){ return null; } };
+const setSyncCfg=c=>{ try{ c? localStorage.setItem('vpaSync',JSON.stringify(c)) : localStorage.removeItem('vpaSync'); }catch(e){} };
+let syncMsg='';
+function syncStatusHTML(){ const c=syncCfg();
+  return c? `☁ Synced between devices via your private GitHub Gist${c.last?` · last sync ${new Date(c.last).toLocaleString([], {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}`:''} ${syncMsg?`· <span style="color:var(--down)">${esc(syncMsg)}</span>`:''}
+      <button class="tb-btn" onclick="syncNow(true)">Sync now</button> <button class="tb-btn" onclick="if(confirm('Turn off sync on this device? (Nothing is deleted.)')){setSyncCfg(null);renderPracticeLog();}">Turn off</button>`
+   : `Phone and PC keep separate logs. <button class="tb-btn sel" onclick="syncSetup()">☁ Sync my devices</button>`; }
+async function gh(path, opt={}){ const c=syncCfg();
+  const r=await fetch('https://api.github.com'+path, Object.assign({}, opt, {headers:{'Authorization':'Bearer '+c.token,'Accept':'application/vnd.github+json','Content-Type':'application/json'}}));
+  if(!r.ok) throw new Error(r.status===401?'token rejected':'GitHub '+r.status); return r.json(); }
+async function syncSetup(){
+  const tok=prompt('Paste a GitHub token with ONLY the "gist" permission.\n\nCreate one at github.com → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token → tick "gist" only.\n\nIt is stored only in this browser and only used to read/write one private gist.');
+  if(!tok) return;
+  setSyncCfg({token:tok.trim()});
+  try{
+    const list=await gh('/gists?per_page=100'); const g=list.find(x=>x.description===SYNC_DESC && x.files[SYNC_FILE]);
+    if(g) setSyncCfg({token:tok.trim(), id:g.id});
+    else { const ng=await gh('/gists',{method:'POST',body:JSON.stringify({description:SYNC_DESC,public:false,files:{[SYNC_FILE]:{content:JSON.stringify(S)}}})}); setSyncCfg({token:tok.trim(), id:ng.id}); }
+    await syncNow(true); toast('☁ Sync on. Do the same once on your other device');
+  }catch(e){ setSyncCfg(null); toast('Sync failed: '+e.message); }
+  renderPracticeLog();
+}
+function mergeStates(a, b){
+  const key=r=>r.ts+'|'+r.id, seen=new Map();
+  [...(a.rounds||[]), ...(b.rounds||[])].forEach(r=>{ if(r&&r.ts) seen.set(key(r), r); });
+  const rounds=[...seen.values()].sort((x,y)=>x.ts<y.ts?-1:1);
+  const daily={}; rounds.forEach(r=>{ const k=localDay(r.ts), d=daily[k]=daily[k]||{rounds:0,xp:0,correct:0}; d.rounds++; d.xp+=r.xp||0; if(r.correct) d.correct++; });
+  const skills={}; for(const s of [a.skills||{}, b.skills||{}]) for(const [k,v] of Object.entries(s)){ const o=skills[k]=skills[k]||{seen:0,correct:0}; if(v.seen>o.seen){ o.seen=v.seen; o.correct=v.correct; } }
+  const pa=a.profile||{}, pb=b.profile||{}, lg=[pa.lastGoalDay,pb.lastGoalDay].filter(Boolean).sort().pop()||null;
+  // streak = consecutive goal days ending at the latest goal day (never lower than what either device already earned)
+  let st=0; if(lg){ const d=new Date(lg+'T00:00:00'); while((daily[localDay(d)]||{}).rounds>=DAILY_GOAL){ st++; d.setDate(d.getDate()-1); } }
+  const profile=Object.assign({}, pb, pa, {xp:rounds.reduce((t,r)=>t+(r.xp||0),0), lastGoalDay:lg,
+    streak:Math.max(st, pa.lastGoalDay===lg?pa.streak||0:0, pb.lastGoalDay===lg?pb.streak||0:0),
+    bestStreak:Math.max(pa.bestStreak||0, pb.bestStreak||0, st), freezes:Math.max(pa.freezes||0, pb.freezes||0)});
+  return {profile, skills, daily, rounds};
+}
+let syncBusy=false, syncTimer=null;
+async function syncNow(loud){
+  const c=syncCfg(); if(!c||!c.id||syncBusy) return; syncBusy=true;
+  try{
+    const g=await gh('/gists/'+c.id); const f=g.files[SYNC_FILE];
+    let remote={}; if(f){ const txt=f.truncated? await (await fetch(f.raw_url)).text() : f.content; try{ remote=JSON.parse(txt); }catch(e){} }
+    const local=S; const merged=mergeStates(local, remote);
+    merged.profile.soundOn=local.profile.soundOn; merged.profile.difficulty=local.profile.difficulty; merged.profile.introReplay=local.profile.introReplay;
+    S=merged; try{ localStorage.setItem('vpaArena', JSON.stringify(S)); }catch(e){}
+    fetch('/api/gameplay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(S)}).catch(()=>{});
+    await gh('/gists/'+c.id,{method:'PATCH',body:JSON.stringify({files:{[SYNC_FILE]:{content:JSON.stringify(S)}}})});
+    setSyncCfg(Object.assign(c,{last:Date.now()})); syncMsg='';
+    if(loud) toast('☁ Synced'); renderTopbar(); if(document.getElementById('screen-home').classList.contains('active')) renderHome();
+  }catch(e){ syncMsg=e.message; if(loud) toast('Sync failed: '+e.message); }
+  syncBusy=false; renderPracticeLog();
+}
+function syncSoon(){ clearTimeout(syncTimer); syncTimer=setTimeout(()=>syncNow(false), 4000); }
+
 /* ============================================================ questions */
 function renderQuestion(){
   const pb=document.getElementById('panelBody');
@@ -2048,9 +2167,9 @@ function finishRound(correct, xp, skillKeys, opts){
   d.rounds++; d.xp+=xp; if(correct) d.correct++;
   S.rounds.push({ts:new Date().toISOString(), mode:round.mode, symbol:round.symbol, id:round.id,
                  answer:opts.answer, truth:round.truth.label||round.concept, correct, conviction:opts.conviction||null,
-                 r:(typeof opts.rMultiple==='number'? opts.rMultiple : null), xp, combo, ...(opts.extra||{})});
+                 r:(typeof opts.rMultiple==='number'? opts.rMultiple : null), xp, combo, dev:DEVICE, ...(opts.extra||{})});
   if(d.rounds>=DAILY_GOAL) onGoalMet();
-  saveState(); renderTopbar();
+  saveState(); renderTopbar(); syncSoon();
   if(workout) workout.results.push(correct);
   renderWQDots();
 
@@ -2125,6 +2244,7 @@ function showWorkoutSummary(){
 
 /* ============================================================ stats screen */
 function renderStats(){
+  renderPracticeLog();
   const cor=S.rounds.filter(r=>r.correct).length;
   document.getElementById('stRounds').textContent=S.rounds.length;
   document.getElementById('stAcc').textContent=pct(cor,S.rounds.length);
@@ -2227,7 +2347,7 @@ document.addEventListener('keydown',(e)=>{
 
 /* ============================================================ boot */
 renderMAChips();
-packsInit().then(loadState);
+packsInit().then(loadState).then(()=>{ if(syncCfg()) syncNow(false); });
 </script>
 </body>
 </html>
