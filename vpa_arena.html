@@ -38,7 +38,8 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 .icon-btn:hover{background:var(--bg3);color:var(--text)}
 
 /* ---------- screens ---------- */
-.screen{display:none;height:calc(100vh - 52px);overflow:auto}
+.screen{display:none;height:calc(100vh - 52px);height:calc(100dvh - 52px);overflow:auto}
+.actbar{position:sticky;bottom:0;z-index:5;background:var(--bg1);margin:10px -16px -16px;padding:10px 16px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--border);box-shadow:0 -8px 16px rgba(0,0,0,.35)}
 .screen.active{display:block}
 
 /* ---------- home ---------- */
@@ -207,6 +208,8 @@ kbd{background:var(--bg3);border:1px solid var(--border);border-radius:4px;paddi
   #chart-toolbar{gap:5px;padding:5px 8px}.tb-btn{padding:4px 8px}.ma-chip{font-size:.6rem;padding:2px 6px}
   #replay-controls{display:none}.kbd-hint{display:none}
   .panel-head{padding:8px 12px}.panel-head h2{font-size:.9rem}.panel-body{padding:10px 12px}
+  .actbar{margin:8px -12px -10px;padding:8px 12px calc(8px + env(safe-area-inset-bottom))}
+  .verdict{padding:12px}.lesson{font-size:.72rem;padding:10px 12px}
   .q-text{font-size:.8rem;margin-bottom:8px}.q-hint{margin-bottom:8px}
   .tm-btn,.ans-btn{padding:11px 10px}
   #chart-side{border-right:none;border-bottom:1px solid var(--border)}
@@ -280,7 +283,7 @@ kbd{background:var(--bg3);border:1px solid var(--border);border-radius:4px;paddi
       </button>
       <button class="mode-card" onclick="startEndless('plan')">
         <div class="mc-icon">📝</div><h3>Plan the Trade</h3>
-        <p>Night-before homework: pick direction, entry (buy stop above a pivot, or at the open), stop and exit rule. Then it runs untouched. Rewards stops beyond the noise, no chasing, and saying "no trade" when nothing works.</p>
+        <p>Night-before homework: pick direction, entry (buy stop above a pivot, or at the open), stop and exit rule. Once it fills, you manage it bar by bar (breakeven, trail, exit) or hand it to autopilot. Rewards stops beyond the noise, no chasing, management that beats the plan, and "no trade" when nothing works.</p>
         <div class="mc-acc" id="accPlan">A/B rate –</div>
       </button>
       <button class="mode-card" onclick="startEndless('breakout')">
@@ -1073,7 +1076,7 @@ async function launchRound(mode){
   const rsBtn=document.getElementById('rsBtn');
   rsBtn.style.display = '';                       // always available on the game screen
   rsBtn.classList.toggle('sel', rsOn && !!round.spy);
-  const head={replay:['CALL THE MOVE','Quick call'],drill:['VPA SIGNAL DRILL','Name that signature'],breakout:['BREAKOUT JUDGE','Follow-through or failure?'],trade:['TRADE MANAGER','Trade it, bar by bar'],position:['POSITION TRADER','Size it, press it, protect it'],trigger:['PULL THE TRIGGER','When do you enter?'],plan:['PLAN THE TRADE','Write the plan, then let it run']}[mode];
+  const head={replay:['CALL THE MOVE','Quick call'],drill:['VPA SIGNAL DRILL','Name that signature'],breakout:['BREAKOUT JUDGE','Follow-through or failure?'],trade:['TRADE MANAGER','Trade it, bar by bar'],position:['POSITION TRADER','Size it, press it, protect it'],trigger:['PULL THE TRIGGER','When do you enter?'],plan:['PLAN THE TRADE','Write the plan, then manage it']}[mode];
   document.getElementById('phMode').textContent=head[0]+(workout?` · ROUND ${workout.i+1}/${workout.queue.length}`:'');
   document.getElementById('phTitle').textContent=head[1];
 
@@ -1172,6 +1175,7 @@ function tradePickDir(dir){
 function armStop(){ stopArm=true; renderTradeEntry(); toast('Click a price level on the chart 🎯'); }
 function onStopPicked(p){
   if(round && round.mode==='position' && phase==='positioning'){ stopArm=false; posSetStop(p); return; }
+  if(round && round.mode==='plan' && phase==='plmanage'){ stopArm=false; pmMove(p); return; }
   if(round && round.mode==='plan' && phase==='plan'){ stopArm=false; if(PL.pick==='trig') PL.trig=p; else PL.stop=p; PL.pick=null; plLines(); renderPL(); return; }
   if(!T || T.closed){ stopArm=false; return; }
   const c=lastShown(); const dirLong=T.dir==='long';
@@ -1528,8 +1532,8 @@ function renderPos(){
      <div class="tm-row"><button class="tm-btn ${stopArm?'arm':''}" onclick="stopArm=!stopArm;renderPos();if(stopArm)toast('Click the chart to place your stop 🎯')">🎯 ${stopArm?'Click chart…':'Stop on chart'} <small>T</small></button>
        <button class="tm-btn" onclick="posSetStop(null)">Clear stop${P.stop!=null?' ('+fmtP(P.stop)+')':''}</button></div>
      <input id="ptNote" class="pt-note" placeholder="Why? (saved with your next order)">
-     <div class="tm-row" style="margin-top:8px"><button class="big-next" style="flex:2;margin-bottom:0" onclick="posStep()">Next candle ▶ <span style="font-weight:400;font-size:.7rem">(space)</span></button>
-       <button class="tm-btn" style="flex:1" onclick="posJump(5)">▶▶ +5</button></div>
+     <div class="actbar"><div class="tm-row" style="margin-bottom:0"><button class="big-next" style="flex:2;margin-bottom:0" onclick="posStep()">Next candle ▶ <span style="font-weight:400;font-size:.7rem">(space)</span></button>
+       <button class="tm-btn" style="flex:1" onclick="posJump(5)">▶▶ +5</button></div></div>
      <div class="tm-row"><button class="tm-btn" style="color:var(--down)" onclick="posQueue('closeall')">✖ Close everything <small>X</small></button><button class="tm-btn" onclick="posPlayOut()">⏩ Play out round</button></div>
      <div class="kbd-hint"><kbd>B</kbd>/<kbd>S</kbd> 1 unit (⇧ for 3) · <kbd>C</kbd>/<kbd>P</kbd> call/put · <kbd>X</kbd> close all · <kbd>L</kbd>/<kbd>A</kbd>/<kbd>T</kbd> stop · <kbd>Space</kbd> next</div>`;
 }
@@ -1785,7 +1789,7 @@ function plLines(){ plLineObjs.forEach(l=>{try{candleSeries.removePriceLine(l);}
 function renderPL(){
   const pb=document.getElementById('panelBody'), i=shownCount-1, c=allBars[i].close, a=rtATR(i);
   if(!PL.dir){
-    pb.innerHTML=`<div class="q-text">Market's closed. Write tomorrow's plan, <b>before</b> the open. You can't touch it once it runs.</div>
+    pb.innerHTML=`<div class="q-text">Market's closed. Write tomorrow's plan <b>before</b> the open. The entry order runs on its own; once it fills, you manage the trade.</div>
       <div class="q-hint">Last close <b>${fmtP(c)}</b> · ATR <b>${fmtP(a)}</b> (${(a/c*100).toFixed(1)}%). Read trend, base, volume and RS first.</div>
       <button class="ans-btn long" onclick="plSet('dir',1)">📈 Long plan <small>buy stop above a level, or at the open</small></button>
       <button class="ans-btn short" onclick="plSet('dir',-1)">📉 Short plan <small>sell stop below a level, or at the open</small></button>
@@ -1811,45 +1815,124 @@ function renderPL(){
     <button class="big-next" ${bad?'disabled style="opacity:.4"':''} onclick="plRun(false)">✅ Lock the plan and run it</button>
     <button class="tm-btn" onclick="plSet('dir',null)">← Back</button>`;
 }
-function plRun(noTrade){
-  if(phase!=='plan') return; phase='reveal'; stopArm=false;
-  const i=shownCount-1, a=rtATR(i);
-  // benchmark plan for scoring "no trade": buy/sell stop beyond the 10-day high/low, stop 3-bar, trail 10-EMA
-  const bench=d=>{ const hi=Math.max(...allBars.slice(i-9,i+1).map(x=>x.high)), lo=Math.min(...allBars.slice(i-9,i+1).map(x=>x.low));
+/* Plan the Trade, part 2: once the order fills, YOU manage it candle by candle (or hand back to autopilot). */
+let PM=null;
+function plBench(){
+  const i=shownCount-1;
+  const one=d=>{ const hi=Math.max(...allBars.slice(i-9,i+1).map(x=>x.high)), lo=Math.min(...allBars.slice(i-9,i+1).map(x=>x.low));
     return plExec(d,'stop', d>0?hi*1.001:lo*0.999, d>0? Math.min(...allBars.slice(i-2,i+1).map(x=>x.low))*0.999 : Math.max(...allBars.slice(i-2,i+1).map(x=>x.high))*1.001, 'ema10'); };
-  const bl=bench(1), bs=bench(-1), bestB = (bl.filled&&bl.R>(bs.filled?bs.R:-9))? bl : bs;
-  let score, fb=[], res=null;
-  if(noTrade){
-    const anyGood = (bl.filled&&bl.R>=1.5)||(bs.filled&&bs.R>=1.5);
-    score = anyGood? 35 : 90;
-    fb.push(anyGood? ['bad',`A standard plan (${bestB===bl?'buy':'sell'} stop beyond the 10-day ${bestB===bl?'high':'low'}, trail 10-EMA) made <b>+${bestB.R.toFixed(1)}R</b>.`]
-                   : ['good','Neither a long nor a short breakout plan worked here, so no trade was the right plan.']);
+  const bl=one(1), bs=one(-1);
+  return {bl, bs, best:(bl.filled&&bl.R>(bs.filled?bs.R:-9))? bl : bs, anyGood:(bl.filled&&bl.R>=1.5)||(bs.filled&&bs.R>=1.5)};
+}
+function plRun(noTrade){
+  if(phase!=='plan') return; stopArm=false;
+  const i=shownCount-1, a=rtATR(i), B=plBench();
+  if(noTrade) return plFinish({noTrade:true, B});
+  const auto=plExec(PL.dir, PL.entryType, PL.trig, PL.stop, PL.rule);          // what the plan does untouched
+  const ctx={d0:i, a, B, auto, rk:Math.abs((PL.entryType==='stop'?PL.trig:allBars[i].close)-PL.stop)/a, ext:(allBars[i].close/rtEMA(10)[i]-1)*100*PL.dir};
+  plLineObjs.forEach(l=>{try{candleSeries.removePriceLine(l);}catch(e){}}); plLineObjs=[];
+  if(!auto.filled){ for(let k=0;k<10 && shownCount<allBars.length;k++) appendBar(); return plFinish(Object.assign(ctx,{filled:false})); }
+  // play forward to the fill bar, then hand over control
+  while(shownCount-1 < auto.fillI) appendBar();
+  PM={dir:PL.dir, px:auto.px, stop:PL.stop, stop0:PL.stop, risk:Math.abs(auto.px-PL.stop), fillI:auto.fillI, widened:false, moves:0, lines:[], ctx, done:false};
+  setMarkerList([{time:allBars[PM.fillI].time,position:PM.dir>0?'belowBar':'aboveBar',color:PM.dir>0?'#26a69a':'#ef5350',shape:PM.dir>0?'arrowUp':'arrowDown',text:'fill'}]);
+  phase='plmanage'; pmLines();
+  if(pmStopHit(allBars[PM.fillI], true)) return;
+  renderPM(); toast('🔔 Order filled. You manage it from here');
+}
+function pmLines(){ PM.lines.forEach(l=>{try{candleSeries.removePriceLine(l);}catch(e){}});
+  PM.lines=[candleSeries.createPriceLine({price:PM.px,color:'#8b94a7',lineWidth:1,lineStyle:2,title:'entry'}),
+            candleSeries.createPriceLine({price:PM.stop,color:'#ef5350',lineWidth:2,lineStyle:2,title:'STOP'})];
+  PM.lines.forEach(l=>priceLines.push(l)); }
+const pmR=p=>PM.dir*(p-PM.px)/PM.risk;
+function pmStopHit(b, fillBar){
+  if(!(PM.dir>0? b.low<=PM.stop : b.high>=PM.stop)) return false;
+  const fill = (!fillBar && (PM.dir>0? b.open<PM.stop : b.open>PM.stop))? b.open : PM.stop;
+  pmExit(fill,'stopped'); return true;
+}
+function pmNext(){
+  if(phase!=='plmanage') return;
+  if(shownCount>=allBars.length || shownCount-1-PM.fillI>=35){ return pmExit(lastShown().close,'time'); }
+  appendBar(); if(pmStopHit(lastShown(),false)) return; renderPM();
+}
+function pmMove(p){ if(phase!=='plmanage'||!isFinite(p)) return;
+  const c=lastShown().close; if(PM.dir>0? p>=c : p<=c){ toast(PM.dir>0?'Stop must stay below price':'Stop must stay above price'); return; }
+  if(PM.dir>0? p<PM.stop : p>PM.stop){ PM.widened=true; toast('⚠ You WIDENED your stop'); }
+  PM.stop=p; PM.moves++; pmLines(); renderPM(); }
+function pmBreakeven(){ pmMove(PM.px); }
+function pmTrail(){ const b=allBars[shownCount-2]||lastShown(); pmMove(PM.dir>0? b.low*0.999 : b.high*1.001); }
+function pmAuto(){ // hand back to the plan's exit rule from here, with the stop where it stands now
+  if(phase!=='plmanage') return;
+  if(!RT_EMA10){ RT_EMA10=rtEMA(10); RT_EMA21=rtEMA(21); }
+  const tgt=PM.px+PM.dir*3*PM.risk, em=PL.rule==='ema21'?RT_EMA21:RT_EMA10;
+  while(phase==='plmanage'){
+    if(shownCount>=allBars.length || shownCount-1-PM.fillI>=35) return pmExit(lastShown().close,'time');
+    appendBar(); const b=lastShown(), j=shownCount-1;
+    if(pmStopHit(b,false)) return;
+    if(PL.rule==='t3r'){ if(PM.dir>0? b.high>=tgt : b.low<=tgt) return pmExit((PM.dir>0? b.open>tgt : b.open<tgt)? b.open : tgt,'target'); }
+    else if(j-PM.fillI>=3 && j+1<allBars.length && (PM.dir>0? b.close<em[j] : b.close>em[j])){ appendBar(); return pmExit(lastShown().open,'trail'); }
+  }
+}
+function pmExit(fill, how, _){ if(phase!=='plmanage') return; phase='plfinishing';
+  PM.lines.forEach(l=>{try{candleSeries.removePriceLine(l);}catch(e){}});
+  const R=pmR(fill); plFinish(Object.assign(PM.ctx,{filled:true, R, how, exitI:shownCount-1, exitPx:fill})); }
+function renderPM(){
+  const c=lastShown().close, r=pmR(c), held=shownCount-1-PM.fillI;
+  document.getElementById('panelBody').innerHTML=
+   `<div class="hud">
+      <div class="hud-box"><small>${PM.dir>0?'📈 Long':'📉 Short'} · entry</small><b>${fmtP(PM.px)}</b></div>
+      <div class="hud-box"><small>Stop ${PM.widened?'⚠':''}</small><b>${fmtP(PM.stop)}</b></div>
+      <div class="hud-box ${r>=0?'pnl-pos':'pnl-neg'}"><small>Open P&L</small><b>${r>=0?'+':''}${r.toFixed(2)}R</b></div>
+      <div class="hud-box"><small>Bars held</small><b>${held} / 35</b></div>
+    </div>
+    <div class="actbar"><div class="tm-row" style="margin-bottom:0"><button class="big-next" style="flex:2;margin-bottom:0" onclick="pmNext()">Next bar ▶</button><button class="tm-btn" style="flex:1" onclick="for(let k=0;k<5&&phase==='plmanage';k++)pmNext()">+5</button></div></div>
+    <div class="tm-row"><button class="tm-btn" onclick="pmBreakeven()">Stop → breakeven <small>B</small></button><button class="tm-btn" onclick="pmTrail()">Trail: prior ${PM.dir>0?'low':'high'} <small>L</small></button></div>
+    <div class="tm-row"><button class="tm-btn ${stopArm?'arm':''}" onclick="stopArm=!stopArm;renderPM();if(stopArm)toast('Click the chart to move your stop 🎯')">🎯 Move stop on chart <small>T</small></button>
+      <button class="tm-btn" onclick="pmAuto()">⏩ Autopilot: ${PL.rule==='t3r'?'3R target':PL.rule==='ema21'?'trail 21-EMA':'trail 10-EMA'} <small>A</small></button></div>
+    <button class="tm-btn" style="color:var(--down)" onclick="pmExit(lastShown().close,'manual')">✖ Exit at ${fmtP(c)} <small>E</small></button>
+    <div class="kbd-hint"><kbd>Space</kbd> next bar · <kbd>B</kbd> breakeven · <kbd>L</kbd> trail · <kbd>E</kbd> exit · <kbd>A</kbd> autopilot</div>`;
+}
+function plFinish(x){
+  phase='reveal'; stopArm=false;
+  const B=x.B; let score, fb=[], ans, skills;
+  if(x.noTrade){
+    score = B.anyGood? 35 : 90; ans='no trade'; skills={discipline:score>=60};
+    fb.push(B.anyGood? ['bad',`A standard plan (${B.best===B.bl?'buy':'sell'} stop beyond the 10-day ${B.best===B.bl?'high':'low'}, trail 10-EMA) made <b>+${B.best.R.toFixed(1)}R</b>.`]
+                     : ['good','Neither a long nor a short breakout plan worked here, so no trade was the right plan.']);
   } else {
-    res=plExec(PL.dir, PL.entryType, PL.trig, PL.stop, PL.rule);
-    const rk=Math.abs((PL.entryType==='stop'?PL.trig:allBars[i].close)-PL.stop)/a;
     let proc=100; const notes=[];
-    if(rk<0.8){ proc-=35; notes.push(['bad',`Stop ${rk.toFixed(1)} ATR from entry, inside the noise.`]); }
-    else if(rk>3){ proc-=15; notes.push(['bad',`Stop ${rk.toFixed(1)} ATR away. That's valid, but it forces small size.`]); }
-    else notes.push(['good',`Stop ${rk.toFixed(1)} ATR from entry: beyond the noise.`]);
-    if(PL.entryType==='open'){ const ext=(allBars[i].close/rtEMA(10)[i]-1)*100*PL.dir; if(ext>6){ proc-=20; notes.push(['bad',`Market entry ${ext.toFixed(0)}% extended from the 10-EMA: chasing.`]); } }
-    if(!res.filled){ score = (bl.filled&&bl.R>=1.5)||(bs.filled&&bs.R>=1.5)? 45 : 75; fb.push(['', `Your ${PL.dir>0?'buy':'sell'} stop at ${fmtP(PL.trig)} never triggered in 10 bars, so the order expired. No risk taken. ${score>=60?'Nothing worked here anyway.':'The move came from somewhere else.'}`]); }
-    else { const out=ptClamp(50+22*res.R,0,100); score=0.6*out+0.4*proc;
-      fb.push([res.R>0?'good':'bad',`Filled ${fmtP(res.px)} on bar ${res.fillI-i}, exit ${fmtP(res.exitPx)} by ${res.how==='trail'?'trailing EMA':res.how==='target'?'3R target':res.how==='stop'?'stop':'time'} = <b>${res.R>=0?'+':''}${res.R.toFixed(2)}R</b> (best open profit +${res.mfe.toFixed(1)}R).`]); }
+    if(x.rk<0.8){ proc-=35; notes.push(['bad',`Initial stop ${x.rk.toFixed(1)} ATR from entry, inside the noise.`]); }
+    else if(x.rk>3){ proc-=15; notes.push(['bad',`Initial stop ${x.rk.toFixed(1)} ATR away. That's valid, but it forces small size.`]); }
+    else notes.push(['good',`Initial stop ${x.rk.toFixed(1)} ATR from entry: beyond the noise.`]);
+    if(PL.entryType==='open' && x.ext>6){ proc-=20; notes.push(['bad',`Market entry ${x.ext.toFixed(0)}% extended from the 10-EMA: chasing.`]); }
+    if(!x.filled){
+      score = B.anyGood? 45 : 75; ans=`${PL.dir>0?'long':'short'} no fill`;
+      fb.push(['',`Your ${PL.dir>0?'buy':'sell'} stop at ${fmtP(PL.trig)} never triggered in 10 bars, so the order expired. No risk taken. ${score>=60?'Nothing worked here anyway.':'The move came from somewhere else.'}`]);
+    } else {
+      const auto=x.auto.R, mgmtDiff=x.R-auto;
+      let mg = PM.widened? 0 : mgmtDiff>=-0.25? 100 : ptClamp(100+40*mgmtDiff,0,100);
+      score = 0.5*ptClamp(50+22*x.R,0,100) + 0.3*proc + 0.2*mg;
+      ans=`${PL.dir>0?'long':'short'} ${x.R>=0?'+':''}${x.R.toFixed(2)}R`;
+      fb.push([x.R>0?'good':'bad',`Filled ${fmtP(PM.px)}, exit ${fmtP(x.exitPx)} (${{stopped:'stop',manual:'your exit',trail:'EMA trail',target:'3R target',time:'time'}[x.how]||x.how}) = <b>${x.R>=0?'+':''}${x.R.toFixed(2)}R</b>.`]);
+      fb.push([mgmtDiff>=-0.25?'good':'bad',`Letting the plan run untouched would have made <b>${auto>=0?'+':''}${auto.toFixed(2)}R</b>, so your management ${mgmtDiff>=0?'added':'cost'} <b>${mgmtDiff>=0?'+':''}${mgmtDiff.toFixed(2)}R</b>.`]);
+      if(PM.widened) fb.push(['bad','You widened the stop. Management score 0.']);
+      else if(PM.moves) fb.push(['',`Stop moved ${PM.moves}× (never widened ✓).`]);
+      skills={planning:proc>=70, risk:!PM.widened&&x.rk>=0.8};
+    }
     fb.push(...notes);
-    if(bestB.filled && (!res.filled || bestB.R>res.R+1)) fb.push(['',`Benchmark plan: ${bestB===bl?'buy':'sell'} stop beyond the 10-day ${bestB===bl?'high':'low'}, trail 10-EMA = ${bestB.R>=0?'+':''}${bestB.R.toFixed(1)}R.`]);
+    if(B.best.filled && (!x.filled || B.best.R>x.R+1)) fb.push(['',`Benchmark plan: ${B.best===B.bl?'buy':'sell'} stop beyond the 10-day ${B.best===B.bl?'high':'low'}, trail 10-EMA = ${B.best.R>=0?'+':''}${B.best.R.toFixed(1)}R.`]);
+    skills=skills||{planning:score>=60};
   }
   plLineObjs.forEach(l=>{try{candleSeries.removePriceLine(l);}catch(e){}}); plLineObjs=[];
-  const mk=[];
-  if(res&&res.filled){ mk.push({time:allBars[res.fillI].time,position:PL.dir>0?'belowBar':'aboveBar',color:PL.dir>0?'#26a69a':'#ef5350',shape:PL.dir>0?'arrowUp':'arrowDown',text:'fill'}); mk.push({time:allBars[res.exitI].time,position:'aboveBar',color:'#f0b90b',shape:'square',text:res.R>=0?'+'+res.R.toFixed(1)+'R':res.R.toFixed(1)+'R'});
-    priceLines.push(candleSeries.createPriceLine({price:res.stop,color:'#ef5350',lineWidth:1,lineStyle:2,title:'stop'})); }
+  const mk=[...markerList];
+  if(x.filled) mk.push({time:allBars[Math.min(x.exitI,allBars.length-1)].time,position:'aboveBar',color:'#f0b90b',shape:'square',text:(x.R>=0?'+':'')+x.R.toFixed(1)+'R'});
   setMarkerList(mk);
   const correct=score>=60, xp=Math.round(score*0.6*(correct?comboMult():1));
-  const head = noTrade? (score>=60?'✋ Right call: no trade':'👀 There was a trade') : !res.filled? '⏸ Not triggered' : res.R>0? (score>=75?'🎯 Plan executed':'✅ Profitable plan') : '❌ Plan stopped out';
-  finishRound(correct, xp, [], {answer: noTrade?'no trade': `${PL.dir>0?'long':'short'} ${res.filled?(res.R>=0?'+':'')+res.R.toFixed(2)+'R':'no fill'}`,
-    skillResults: noTrade? {discipline:correct} : {planning:correct, risk: !(Math.abs((PL.entryType==='stop'?PL.trig:allBars[i].close)-PL.stop)/a<0.8)},
+  const head = x.noTrade? (score>=60?'✋ Right call: no trade':'👀 There was a trade') : !x.filled? '⏸ Not triggered' : x.R>0? (score>=75?'🎯 Plan executed':'✅ Profitable plan') : x.how==='stopped'? (x.R>=-1.1?'🛡 Stopped out: loss contained':'❌ Stopped out') : '❌ Closed at a loss';
+  finishRound(correct, xp, [], {answer:ans, skillResults:skills,
     detailHTML:`<div style="display:flex;gap:12px;align-items:center;margin-bottom:8px"><div style="font-size:2.3rem;font-weight:800;color:${rtCol(score)};line-height:1">${rtGrade(score)}</div><div style="font-family:var(--mono);font-size:.74rem">${Math.round(score)}/100 · ${esc(round.origin||'')}</div></div>
       <ul class="pt-fb">${fb.map(([c,t])=>`<li class="${c}">${t}</li>`).join('')}</ul>`,
-    lesson: LESSONS[noTrade? 'pl_notrade' : 'pl_plan'], headline:head, manualReveal:true, rMultiple: res&&res.filled? +res.R.toFixed(2) : null, extra:{score:Math.round(score)}});
+    lesson: LESSONS[x.noTrade? 'pl_notrade' : 'pl_plan'], headline:head, manualReveal:true, rMultiple: x.filled? +x.R.toFixed(2) : null, extra:{score:Math.round(score)}});
 }
 function plExec(dir, type, trig, stop, rule){
   const i=shownCount-1;
@@ -1979,7 +2062,7 @@ function finishRound(correct, xp, skillKeys, opts){
     revealTimer=setInterval(()=>{ if(!appendBar()){ stopReveal(); } }, 55);
   }
   const aftermathCtl = opts.manualReveal && shownCount<allBars.length ?
-    `<div class="tm-row" style="margin-bottom:9px">
+    `<div class="tm-row" style="margin-bottom:7px">
        <button class="tm-btn" onclick="revealPlay(this)">▶ Play aftermath</button>
        <button class="tm-btn" onclick="revealStep(5)">+5 bars</button>
        <button class="tm-btn" onclick="revealAllNow()">Show all</button>
@@ -1998,11 +2081,11 @@ function finishRound(correct, xp, skillKeys, opts){
        <div class="v-xp">${xp>0? '+'+xp+' XP':'+0 XP — combo reset'}</div>
      </div>
      <div class="lesson">${opts.lesson}</div>
-     ${aftermathCtl}
      ${reEnterBtn}
      ${learnLink}
-     <button class="next-btn" id="nextBtn">${workout? (workout.i+1<workout.queue.length?'Next round ▶':'Finish workout 🏁') : 'Next round ▶'}</button>
-     <div class="kbd-hint"><kbd>N</kbd> or <kbd>Enter</kbd> for next</div>`;
+     <div class="kbd-hint"><kbd>N</kbd> or <kbd>Enter</kbd> for next</div>
+     <div class="actbar">${aftermathCtl}
+       <button class="next-btn" id="nextBtn" style="margin-bottom:0">${workout? (workout.i+1<workout.queue.length?'Next round ▶':'Finish workout 🏁') : 'Next round ▶'}</button></div>`;
   document.getElementById('nextBtn').onclick=nextRound;
   phase='done';
   if(newLvl>prevLvl){
@@ -2110,6 +2193,9 @@ document.addEventListener('keydown',(e)=>{
   if(phase==='trigger'){ const k=e.key.toLowerCase();
     if(e.code==='Space'||e.key==='ArrowRight'){ e.preventDefault(); tgNext(); } else if(k==='b') tgFire(1); else if(k==='s') tgFire(-1);
     else if(k==='x') tgFinish(null); else if(k==='a') tgAuto(); return; }
+  if(phase==='plmanage'){ const k=e.key.toLowerCase();
+    if(e.code==='Space'||e.key==='ArrowRight'){ e.preventDefault(); pmNext(); } else if(k==='b') pmBreakeven(); else if(k==='l') pmTrail();
+    else if(k==='e') pmExit(lastShown().close,'manual'); else if(k==='a') pmAuto(); else if(k==='t'){ stopArm=!stopArm; renderPM(); } return; }
   if(phase==='plan' && PL && !PL.dir){ if(e.key==='1') plSet('dir',1); else if(e.key==='2') plSet('dir',-1); else if(e.key==='3') plRun(true); return; }
   if(phase==='question' && round && round.mode==='trade' && (!T||!T.dir) && e.code==='Space'){ e.preventDefault(); tradeWait(); return; }
   if(phase==='positioning'){
